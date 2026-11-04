@@ -194,6 +194,7 @@ img.miss{opacity:.35}
 @keyframes fade{from{opacity:0}}
 .drawer{position:absolute;left:0;top:0;bottom:0;width:min(300px,82vw);background:var(--bg);overflow-y:auto;padding:calc(12px + env(safe-area-inset-top)) 0 calc(16px + env(safe-area-inset-bottom));animation:slide .22s ease-out;box-shadow:0 0 24px rgba(0,0,0,.2)}
 @keyframes slide{from{transform:translateX(-100%)}}
+.layer.drag .drawer,.layer.drag .backdrop{animation:none}
 .drawer .dtop{display:flex;justify-content:space-between;align-items:flex-start;padding:4px 16px}
 .drawer .dme{padding:8px 16px 0}
 .drawer .dme .nm{font-size:1.1em;display:block}
@@ -576,14 +577,24 @@ function openViewer(list,k){$('.viewer')?.remove();const v=document.createElemen
  v.onclick=e=>{const b=e.target.closest('[data-v]');if(!b){if(e.target===v)v.remove();return}e.stopPropagation();const a=b.dataset.v;if(a==='close')v.remove();if(a==='prev'){k=(k-1+list.length)%list.length;show()}if(a==='next'){k=(k+1)%list.length;show()}if(a==='post'){v.remove();location.hash='#/post/'+list[k][1]}};
  let sx=null;v.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});v.addEventListener('touchend',e=>{if(sx==null||list.length<2)return;const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50){k=(k+(dx<0?1:-1)+list.length)%list.length;show()}sx=null});
  show()}
-/* 画面左側からの右スワイプでメニュー、メニュー上で左スワイプで閉じる */
+/* 画面左側から右スワイプでメニュー（指に追従）、メニュー上で左スワイプで閉じる */
+function drawerParts(){const dr=$('.drawer');return dr?{dr,bd:dr.closest('.layer').querySelector('.backdrop'),l:dr.closest('.layer'),w:dr.offsetWidth}:null}
+function drawerPos(P,x,anim){const tr=anim?'.24s cubic-bezier(.2,.8,.2,1)':'0s';P.dr.style.transition='transform '+tr;P.bd.style.transition='opacity '+tr;P.dr.style.transform=`translateX(${x}px)`;P.bd.style.opacity=Math.max(0,Math.min(1,1+x/P.w))}
+function closeDrawerAnimated(){const P=drawerParts();if(!P)return;P.l.classList.add('drag');drawerPos(P,-P.w,true);setTimeout(()=>closeLayer(P.l),240)}
 (()=>{let st=null;
- document.addEventListener('touchstart',e=>{if(innerWidth>=700||e.touches.length!==1){st=null;return}const t=e.touches[0];const dr=$('.drawer');
-  if(dr)st={x:t.clientX,y:t.clientY,close:true};else if(t.clientX<=innerWidth*.4&&!$('.layer')&&!$('.viewer')&&!e.target.closest('input,textarea,.media'))st={x:t.clientX,y:t.clientY,close:false};else st=null},{passive:true});
- document.addEventListener('touchmove',e=>{if(!st)return;const t=e.touches[0];const dx=t.clientX-st.x,dy=Math.abs(t.clientY-st.y);
-  if(dy>40&&dy>Math.abs(dx)){st=null;return}
-  if(!st.close&&dx>70){st=null;openDrawer()}else if(st.close&&dx<-60){st=null;closeLayer($('.drawer')?.closest('.layer'))}},{passive:true});
- document.addEventListener('touchend',()=>{st=null},{passive:true})})();
+ document.addEventListener('touchstart',e=>{st=null;if(innerWidth>=700||e.touches.length!==1)return;const t=e.touches[0];
+  if($('.drawer'))st={mode:'close',x:t.clientX,y:t.clientY};
+  else if(t.clientX<=innerWidth*.4&&!$('.layer')&&!$('.viewer')&&!e.target.closest('input,textarea,.media'))st={mode:'open',x:t.clientX,y:t.clientY};
+  if(st){st.lock=false;st.hist=[[t.clientX,performance.now()]]}},{passive:true});
+ document.addEventListener('touchmove',e=>{if(!st)return;const t=e.touches[0];const dx=t.clientX-st.x,dy=t.clientY-st.y;
+  if(!st.lock){if(Math.abs(dx)<8&&Math.abs(dy)<8)return;if(Math.abs(dy)>Math.abs(dx)||(st.mode==='open'&&dx<0)){st=null;return}
+   st.lock=true;if(st.mode==='open'){openDrawer()}st.P=drawerParts();if(!st.P){st=null;return}st.P.l.classList.add('drag')}
+  e.preventDefault();const P=st.P,d=t.clientX-st.x;const x=st.mode==='open'?Math.min(0,Math.max(-P.w,d-P.w)):Math.min(0,Math.max(-P.w,d));
+  st.cur=x;drawerPos(P,x,false);st.hist.push([t.clientX,performance.now()]);if(st.hist.length>5)st.hist.shift()},{passive:false});
+ const end=()=>{if(!st||!st.lock){st=null;return}const P=st.P,h=st.hist,a=h[0],b=h[h.length-1];const v=(b[0]-a[0])/Math.max(1,b[1]-a[1]);const x=st.cur??(st.mode==='open'?-P.w:0);
+  const open=v>0.35?true:v<-0.35?false:x>-P.w/2;
+  if(open)drawerPos(P,0,true);else{drawerPos(P,-P.w,true);setTimeout(()=>closeLayer(P.l),240)}st=null};
+ document.addEventListener('touchend',end,{passive:true});document.addEventListener('touchcancel',end,{passive:true})})();
 document.addEventListener('keydown',e=>{const v=$('.viewer');if(e.key==='Escape'){if(v)v.remove();else{const l=$$('.layer').pop();if(l&&!l.querySelector('.sheet'))closeLayer(l)}}if(v&&e.key==='ArrowRight')v.querySelector('[data-v=next]')?.click();if(v&&e.key==='ArrowLeft')v.querySelector('[data-v=prev]')?.click()});
 
 /* --- 投稿作成 --- */
@@ -658,7 +669,7 @@ function openAccEdit(id){const isNew=!id;const a=isNew?newAccount({name:'',handl
 /* ========== 操作 ========== */
 function doAct(a,el,e){const id=el.dataset.id;const p=id&&D.posts[id];
  switch(a){
- case'close':closeLayer(el.closest('.layer'));break;
+ case'close':if(el.closest('.layer')?.querySelector('.drawer'))closeDrawerAnimated();else closeLayer(el.closest('.layer'));break;
  case'back':history.length>1?history.back():location.hash='#/home';break;
  case'drawer':openDrawer();break;
  case'compose':openCompose();break;
