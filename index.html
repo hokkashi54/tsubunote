@@ -491,7 +491,7 @@ function homeItems(){const c=cur();return visPosts().filter(p=>(S.showReplies||!
 function vHome(){const c=cur();const st=syncState();
  return `<div class="top"><div class="tbar"><button class="ibtn" data-act="drawer" aria-label="メニュー" style="width:32px;height:32px">${avatar(c,32)}</button><div class="brand">${ic('bubble')}</div><div class="tright">${syncBtn()}<button class="ibtn" data-act="sort" title="${S.sort==='desc'?'新しい順':'古い順'}">${ic(S.sort==='desc'?'sortd':'sortu')}</button></div></div>
  <div class="tabs"><button class="${S.allAccounts?'on':''}" data-act="tab" data-v="1">すべて</button><button class="${S.allAccounts?'':'on'}" data-act="tab" data-v="0">${esc(c.name)}</button></div></div>
- ${st==='login'?`<div class="banner">${ic('warn')}<span>同期の有効期限が切れました</span><button class="pill sm" data-act="login">再接続</button></div>`:''}
+ ${st==='login'?`<div class="banner">${ic('warn')}<span>${(()=>{try{const a=JSON.parse(localStorage.getItem('tn_autherr')||'null');return a&&a.silent?'自動で再接続できませんでした':'同期の有効期限が切れました'}catch(e){return'同期の有効期限が切れました'}})()}</span><button class="pill sm" data-act="login">再接続</button></div>`:''}
  <div class="qbox" data-act="compose">${avatar(c,40)}<span class="ph2">いまどうしてる？</span><span class="pill">ポストする</span></div>
  <div id="list"></div>`}
 vHome.after=()=>mountList(homeItems(),{emptyT:'ようこそ！',emptyS:'右下のボタンから最初のメモをポストしましょう。'});
@@ -575,7 +575,7 @@ function vSettings(){const th=[['system','端末に合わせる'],['light','ラ�
   <div class="note">データはあなたのGoogleドライブの「アプリ専用の隠しフォルダ」に保存され、同じクライアントIDを設定した端末間で同期されます。</div>
   <label class="fld"><small>OAuth クライアントID</small><input data-set="clientId" value="${esc(S.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false"></label>
   <div class="note">Google Cloud に登録するURI（JavaScript生成元 / リダイレクトURI）:<br>生成元 <code>${esc(location.origin)}</code><br>リダイレクト <code>${esc(ru)}</code></div>
-  <div class="set-row"><div class="lb">状態<small>${syncText()}</small></div></div>
+  <div class="set-row"><div class="lb">状態<small>${syncText()}${S.email?' · '+esc(S.email):''}</small>${(()=>{try{const a=JSON.parse(localStorage.getItem('tn_autherr')||'null');return a?`<small>前回の再接続エラー: ${esc(a.e)}（${relTime(a.at)}${now()-a.at<86400000?'前':''}・${a.silent?'自動':'手動'}・ヒント${a.hint?'あり':'なし'}）</small>`:''}catch(e){return''}})()}</div></div>
   <div class="btns">${G.token()?`<button class="pill" data-act="sync">今すぐ同期</button><button class="pill ghost" data-act="logout">切断</button>`:`<button class="pill" data-act="login" ${S.clientId?'':'disabled'}>Googleで接続</button>${S.linked?'<button class="pill ghost" data-act="logout">切断</button>':''}`}</div>
   <div class="set-row"><div class="lb">起動時に自動で再接続<small>トークンの期限（約1時間）が切れていたら、起動時に自動でGoogleに再接続します</small></div>${sw('autoSync',S.autoSync)}</div>
  </div>
@@ -794,11 +794,11 @@ const G={
  login(silent){if(!S.clientId){toast('設定でクライアントIDを入力してください');location.hash='#/settings';return}
   const st=uid();sessionStorage.setItem('tn_oauth_state',st);sessionStorage.setItem('tn_return',location.hash||'#/home');
   const p=new URLSearchParams({client_id:S.clientId,redirect_uri:redirectUri(),response_type:'token',scope:'https://www.googleapis.com/auth/drive.appdata',include_granted_scopes:'true',state:st});
-  if(silent)p.set('prompt','none');localStorage.setItem('tn_lastauth',now());location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p},
+  if(S.email)p.set('login_hint',S.email);if(silent)p.set('prompt','none');sessionStorage.setItem('tn_silent',silent?'1':'0');this.navigating=true;location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p},
  handleRedirect(){const h=location.hash;if(!/[#&](access_token|error)=/.test(h))return false;const q=new URLSearchParams(h.replace(/^#\/?/,''));const ret=sessionStorage.getItem('tn_return')||'#/home';
   if(q.get('state')!==sessionStorage.getItem('tn_oauth_state')){history.replaceState(null,'',redirectUri()+ret);return true}
-  if(q.get('access_token')){localStorage.setItem('tn_gtoken',JSON.stringify({v:q.get('access_token'),exp:now()+(+q.get('expires_in')||3600)*1000}));if(!S.linked){S.linked=true;saveS();setTimeout(()=>toast('Googleドライブと接続しました'),300)}}
-  else{this.authError=q.get('error');if(!['interaction_required','login_required','consent_required'].includes(this.authError))setTimeout(()=>toast('Google接続エラー: '+this.authError),300)}
+  if(q.get('access_token')){localStorage.setItem('tn_gtoken',JSON.stringify({v:q.get('access_token'),exp:now()+(+q.get('expires_in')||3600)*1000}));localStorage.removeItem('tn_autherr');if(!S.linked){S.linked=true;saveS();setTimeout(()=>toast('Googleドライブと接続しました'),300)}}
+  else{this.authError=q.get('error');try{localStorage.setItem('tn_autherr',JSON.stringify({e:this.authError,at:now(),silent:sessionStorage.getItem('tn_silent')==='1',hint:!!S.email}))}catch(e){}if(!['interaction_required','login_required','consent_required'].includes(this.authError))setTimeout(()=>toast('Google接続エラー: '+this.authError),300)}
   history.replaceState(null,'',redirectUri()+ret);return true},
  logout(){const t=this.token();if(t)fetch('https://oauth2.googleapis.com/revoke?token='+t,{method:'POST'}).catch(()=>{});localStorage.removeItem('tn_gtoken');S.linked=false;saveS();toast('切断しました')},
  async api(url,opt={}){const t=this.token();if(!t)throw new Error('auth');const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:'Bearer '+t}});if(r.status===401){localStorage.removeItem('tn_gtoken');throw new Error('auth')}if(!r.ok)throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,200));return r},
@@ -819,7 +819,7 @@ function scheduleSync(){if(!S.linked||!G.token())return;clearTimeout(SYNC.timer)
 function merge(a,b){const o={accounts:{},posts:{},images:{}};for(const c of ['accounts','posts','images']){o[c]={...(a[c]||{})};for(const [k,v] of Object.entries((b&&b[c])||{})){const x=o[c][k];if(!x||(v.updatedAt||0)>(x.updatedAt||0))o[c][k]=v}}return o}
 async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;return}if(!G.token()){updSyncUI();if(manual)G.login(false);return}
  SYNC.busy=true;SYNC.manual=!!manual;SYNC.err=null;updSyncUI();
- let changed=false;try{const files=await G.list();const f=files[0];
+ let changed=false;try{if(!S.email){try{const ab=await (await G.api('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json();if(ab.user?.emailAddress){S.email=ab.user.emailAddress;saveS()}}catch(e){}}const files=await G.list();const f=files[0];
   if(f){const remote=await (await G.api(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).json();const before=JSON.stringify(D);
    // 初回同期時: 自動作成された未使用アカウントは、リモートにアカウントがあれば削除
    const remoteAccs=Object.values(remote.accounts||{}).filter(x=>!x.deleted);
@@ -844,13 +844,13 @@ async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;
 let lastInteract=0;['pointerdown','keydown','touchstart','wheel'].forEach(n=>addEventListener(n,()=>{lastInteract=now()},{passive:true,capture:true}));
 function tokenLeft(){try{const t=JSON.parse(localStorage.getItem('tn_gtoken')||'null');return t?t.exp-now():-1}catch(e){return -1}}
 function autoRefresh(force){if(!S.linked||!S.autoSync||!S.clientId||G.authError)return false;const left=tokenLeft();if(left>8*60000)return false;
- if(now()-(+localStorage.getItem('tn_lastauth')||0)<5*60000)return false;
+ if(G.navigating)return false;try{const ae=JSON.parse(localStorage.getItem('tn_autherr')||'null');if(ae&&ae.silent&&now()-ae.at<5*60000)return false}catch(e){}
  if($('.layer')||$('.viewer')||SYNC.busy||/INPUT|TEXTAREA/.test(document.activeElement?.tagName||''))return false;
  const hidden=document.visibilityState!=='visible';const idle=now()-lastInteract;
  if(!force&&!hidden&&idle<(left>0?30000:5000))return false;
  try{sessionStorage.setItem('tn_scroll',JSON.stringify({h:location.hash,y:scrollY,n:LIST?.shown||0}))}catch(e){}
  G.login(true);return true}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){autoRefresh(true);return}if(G.token())sync(false);else if(!autoRefresh(true))updSyncUI()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')return;if(G.token())sync(false);else if(!autoRefresh(true))updSyncUI()});
 setInterval(()=>{if(!autoRefresh(false)&&document.visibilityState==='visible'&&G.token()&&!SYNC.busy)sync(false)},30000);
 setInterval(()=>{if(document.visibilityState==='visible'&&G.token()&&!SYNC.busy)sync(false)},5*60000);
 
