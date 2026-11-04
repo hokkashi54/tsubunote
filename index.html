@@ -546,7 +546,7 @@ function vSettings(){const th=[['system','端末に合わせる'],['light','ラ�
  </div>
  <div class="set-sec"><h3>データ</h3>
   <div class="btns"><button class="pill ghost" data-act="export" data-v="txt">テキスト(.txt)</button><button class="pill ghost" data-act="export" data-v="csv">CSV</button><button class="pill ghost" data-act="export" data-v="json">バックアップ(.json)</button></div>
-  <div class="btns"><button class="pill ghost" data-act="import">バックアップから復元</button></div>
+  <div class="btns"><button class="pill ghost" data-act="import">バックアップから復元</button><button class="pill ghost" data-act="import-tm">ツイメモのCSVを取り込む</button></div>
   <div class="note">バックアップには画像も含まれます。復元は既存データに統合されます（上書き削除はされません）。</div>
  </div>
  <div class="note" style="padding:16px 16px 32px">つぶノート v1.0 · ポスト ${livePosts().length}件 · 画像 ${mediaList().length}枚</div>`}
@@ -675,6 +675,7 @@ function doAct(a,el,e){const id=el.dataset.id;const p=id&&D.posts[id];
  case'logout':if(confirm('Googleドライブとの同期を切断しますか？\n（この端末とドライブのデータは消えません）')){G.logout();render()}break;
  case'export':exportData(el.dataset.v);break;
  case'import':importData();break;
+ case'import-tm':importTwimemo();break;
  }}
 document.addEventListener('click',e=>{const t=e.target;if(t.closest('.sheet,.modal,.viewer'))return;
  const a=t.closest('[data-act]');if(a){e.preventDefault();doAct(a.dataset.act,a,e);return}
@@ -699,6 +700,28 @@ async function exportData(kind){const ps=livePosts().sort((a,b)=>a.createdAt-b.c
 async function importData(){const i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.onchange=async()=>{try{const j=JSON.parse(await i.files[0].text());if(j.format!=='tsubunote-backup')throw 0;
  for(const [id,u] of Object.entries(j.images||{})){if(!(await idb.get('blobs',id)))await idb.put('blobs',id,await (await fetch(u)).blob())}
  D=merge(D,j.data);for(const im of Object.values(D.images))if(j.images?.[im.id]&&!im.driveId)im.updatedAt=now();ensureAccount();save();render();toast('復元しました')}catch(e){toast('このファイルは読み込めません')}};i.click()}
+
+/* ========== ツイメモCSVの取り込み ========== */
+function parseCSV(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}if(f!==''||row.length){row.push(f);rows.push(row)}return rows}
+function strHash(s){let h1=0x811c9dc5,h2=0;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);h1=Math.imul(h1^c,16777619);h2=(Math.imul(h2,31)+c)|0}return (h1>>>0).toString(36)+(h2>>>0).toString(36)}
+async function importTwimemo(){const i=document.createElement('input');i.type='file';i.accept='.csv,text/csv,text/plain';i.onchange=async()=>{try{
+ let t=await i.files[0].text();t=t.replace(/^\ufeff/,'');const rows=parseCSV(t);const h=rows.findIndex(r=>r[0]&&r[0].trim()==='作成日時');if(h<0)throw new Error('ツイメモのCSVではないようです');
+ const col=n=>rows[h].findIndex(x=>x.trim()===n);const C={at:col('作成日時'),name:col('名前'),uid:col('ユーザid'),text:col('テキスト'),reply:col('コメント数'),rt:col('リメモ数'),like:col('いいね数')};
+ const items=[];for(const r of rows.slice(h+1)){if(r.length<4)continue;const raw=(r[C.at]||'').trim();const at=Date.parse(raw.replace(' ','T'));if(!at)continue;
+  const handle=(r[C.uid]||'').trim().replace(/^@/,'').replace(/[^A-Za-z0-9_]/g,'')||'user';const text=(r[C.text]||'').replace(/[ \t]+(?=\n|$)/g,'');const n=k=>C[k]>=0?Math.max(0,parseInt((r[C[k]]||'').trim())||0):0;
+  items.push({at,handle,name:(r[C.name]||'').trim()||handle,text,reply:n('reply'),rt:n('rt'),like:n('like')})}
+ if(!items.length)throw new Error('取り込めるメモがありませんでした');
+ const accs=[...new Map(items.map(x=>[x.handle.toLowerCase(),x])).values()];
+ const newAccs=accs.filter(x=>!accByHandle(x.handle));
+ const dup=items.filter(x=>D.posts['tm_'+strHash(x.handle+'|'+x.at+'|'+x.text)]).length;
+ if(!confirm(`ツイメモのメモ ${items.length}件を取り込みます。\n\nアカウント: ${accs.map(a=>a.name+' (@'+a.handle+')').join('、')}\n${newAccs.length?`（新しく作成: ${newAccs.length}件）`:''}${dup?`\n取り込み済みの ${dup}件 はスキップします。`:''}\n\n画像・返信のつながりはCSVに含まれないため移行されません。`))return;
+ const t0=now();let k=0;
+ for(const a of newAccs){const ac=newAccount({name:a.name,handle:a.handle,joined:Math.min(...items.filter(x=>x.handle===a.handle).map(x=>x.at)),order:t0+(k++)});ac.updatedAt=t0;D.accounts[ac.id]=ac}
+ let added=0;for(const x of items){const id='tm_'+strHash(x.handle+'|'+x.at+'|'+x.text);if(D.posts[id])continue;const a=accByHandle(x.handle);D.posts[id]={id,accountId:a.id,text:x.text,images:[],createdAt:x.at,replyTo:null,counts:{reply:x.reply,rt:x.rt,like:x.like,view:0},liked:false,rted:false,bm:false,pinned:false,updatedAt:t0};added++}
+ // 自動作成された未使用の初期アカウントは片付ける
+ for(const a of Object.values(D.accounts))if(a.auto&&!a.deleted&&!Object.values(D.posts).some(p=>p.accountId===a.id&&!p.deleted)){a.deleted=true;a.updatedAt=t0}
+ if(!acc(S.current)){S.current=accByHandle(accs[0].handle).id;saveS()}
+ save();location.hash='#/home';render();toast(`${added}件を取り込みました`)}catch(e){toast(e.message||'読み込めませんでした')}};i.click()}
 
 /* ========== Google ドライブ同期 ========== */
 function redirectUri(){return location.origin+location.pathname.replace(/index\.html$/,'')}
