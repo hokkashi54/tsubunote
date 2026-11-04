@@ -18,7 +18,8 @@
 [data-theme=dark]{--bg:#000;--bgt:rgba(0,0,0,.65);--fg:#e7e9ea;--sub:#71767b;--line:#2f3336;--hover:rgba(255,255,255,.03);--input:#202327;--shade:rgba(91,112,131,.35)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--fg)}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;font-size:var(--fs);line-height:1.45;overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
+html{scrollbar-gutter:stable}
+body{overscroll-behavior-x:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;font-size:var(--fs);line-height:1.45;overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,textarea,select{font:inherit;color:inherit}
 a{color:var(--accent);text-decoration:none}
@@ -294,7 +295,8 @@ mark{background:rgba(255,212,0,.45);color:inherit;border-radius:2px}
   .side .sacc .t{flex:1;min-width:0;text-align:left;line-height:1.25;font-size:15px}
   .side .sacc .t b,.side .sacc .t span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .side .sacc .t span{color:var(--sub)}
-  .rcol{display:block;width:350px;padding:8px 24px;position:sticky;top:0;height:100vh;overflow-y:auto;flex:none}
+  .rcol{display:block;width:350px;padding:8px 24px;position:sticky;top:0;height:100vh;overflow-y:auto;flex:none;scrollbar-width:none}
+  .rcol::-webkit-scrollbar{display:none}
   .rcard{background:var(--input);border-radius:16px;margin-top:16px;overflow:hidden}
   [data-theme=light] .rcard{background:#f7f9f9}
   .rcard .sec-ttl{padding:12px 16px}
@@ -574,6 +576,14 @@ function openViewer(list,k){$('.viewer')?.remove();const v=document.createElemen
  v.onclick=e=>{const b=e.target.closest('[data-v]');if(!b){if(e.target===v)v.remove();return}e.stopPropagation();const a=b.dataset.v;if(a==='close')v.remove();if(a==='prev'){k=(k-1+list.length)%list.length;show()}if(a==='next'){k=(k+1)%list.length;show()}if(a==='post'){v.remove();location.hash='#/post/'+list[k][1]}};
  let sx=null;v.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});v.addEventListener('touchend',e=>{if(sx==null||list.length<2)return;const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50){k=(k+(dx<0?1:-1)+list.length)%list.length;show()}sx=null});
  show()}
+/* 画面左側からの右スワイプでメニュー、メニュー上で左スワイプで閉じる */
+(()=>{let st=null;
+ document.addEventListener('touchstart',e=>{if(innerWidth>=700||e.touches.length!==1){st=null;return}const t=e.touches[0];const dr=$('.drawer');
+  if(dr)st={x:t.clientX,y:t.clientY,close:true};else if(t.clientX<=innerWidth*.4&&!$('.layer')&&!$('.viewer')&&!e.target.closest('input,textarea,.media'))st={x:t.clientX,y:t.clientY,close:false};else st=null},{passive:true});
+ document.addEventListener('touchmove',e=>{if(!st)return;const t=e.touches[0];const dx=t.clientX-st.x,dy=Math.abs(t.clientY-st.y);
+  if(dy>40&&dy>Math.abs(dx)){st=null;return}
+  if(!st.close&&dx>70){st=null;openDrawer()}else if(st.close&&dx<-60){st=null;closeLayer($('.drawer')?.closest('.layer'))}},{passive:true});
+ document.addEventListener('touchend',()=>{st=null},{passive:true})})();
 document.addEventListener('keydown',e=>{const v=$('.viewer');if(e.key==='Escape'){if(v)v.remove();else{const l=$$('.layer').pop();if(l&&!l.querySelector('.sheet'))closeLayer(l)}}if(v&&e.key==='ArrowRight')v.querySelector('[data-v=next]')?.click();if(v&&e.key==='ArrowLeft')v.querySelector('[data-v=prev]')?.click()});
 
 /* --- 投稿作成 --- */
@@ -746,14 +756,14 @@ const G={
  async remove(id){try{await this.api(`https://www.googleapis.com/drive/v3/files/${id}`,{method:'DELETE'})}catch(e){if(!/HTTP 404/.test(e.message))throw e}}
 };
 let SYNC={busy:false,pending:false,err:null,timer:null};
-function syncState(){if(!S.linked)return'off';if(SYNC.busy)return'syncing';if(!G.token())return'login';if(SYNC.err)return'error';return'ok'}
+function syncState(){if(!S.linked)return'off';if(SYNC.busy&&SYNC.manual)return'syncing';if(!G.token())return'login';if(SYNC.err)return'error';return'ok'}
 function syncText(){const st=syncState();const last=S.lastSync?`最終同期: ${now()-S.lastSync<60000?'たった今':relTime(S.lastSync)+(now()-S.lastSync<86400000?'前':'')}`:'未同期';
  return {off:S.clientId?'未接続（設定から接続できます）':'未設定（設定でクライアントIDを入力）',syncing:'同期中…',login:'再接続が必要です · '+last,error:'エラー: '+esc(SYNC.err||'')+' · '+last,ok:'接続中 · '+last}[st]}
 function updSyncUI(){$$('.syncb').forEach(b=>{const t=document.createElement('div');t.innerHTML=syncBtn();t.firstElementChild?b.replaceWith(t.firstElementChild):b.remove()});rcol()}
 function scheduleSync(){if(!S.linked||!G.token())return;clearTimeout(SYNC.timer);SYNC.timer=setTimeout(()=>sync(false),2500)}
 function merge(a,b){const o={accounts:{},posts:{},images:{}};for(const c of ['accounts','posts','images']){o[c]={...(a[c]||{})};for(const [k,v] of Object.entries((b&&b[c])||{})){const x=o[c][k];if(!x||(v.updatedAt||0)>(x.updatedAt||0))o[c][k]=v}}return o}
 async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;return}if(!G.token()){updSyncUI();if(manual)G.login(false);return}
- SYNC.busy=true;SYNC.err=null;updSyncUI();
+ SYNC.busy=true;SYNC.manual=!!manual;SYNC.err=null;updSyncUI();
  let changed=false;try{const files=await G.list();const f=files[0];
   if(f){const remote=await (await G.api(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).json();const before=JSON.stringify(D);
    // 初回同期時: 自動作成された未使用アカウントは、リモートにアカウントがあれば削除
@@ -774,7 +784,7 @@ async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;
   S.lastSync=now();saveS();if(manual)toast('同期しました');
   if((changed||downloads.length)&&!$('.layer'))softRender()}
  catch(e){console.error(e);if(e.message!=='auth')SYNC.err=e.message.slice(0,80);if(manual&&e.message!=='auth')toast('同期に失敗しました')}
- finally{SYNC.busy=false;updSyncUI();if(SYNC.pending){SYNC.pending=false;setTimeout(()=>sync(false),400)}}}
+ finally{SYNC.busy=false;SYNC.manual=false;updSyncUI();if(SYNC.pending){SYNC.pending=false;setTimeout(()=>sync(false),400)}}}
 function maybeSilentLogin(){if(!S.linked||!S.autoSync||!S.clientId||G.token()||$('.layer'))return false;if(G.authError)return false;if(now()-(+localStorage.getItem('tn_lastauth')||0)<10*60000)return false;G.login(true);return true}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(G.token())sync(false);else if(!maybeSilentLogin())updSyncUI()});
 setInterval(()=>{if(document.visibilityState==='visible'&&G.token()&&!SYNC.busy)sync(false)},5*60000);
