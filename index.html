@@ -66,6 +66,18 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .media.n3,.media.n4{grid-template-rows:1fr 1fr}
 .media.n3 img:first-child{grid-row:span 2}
 img.miss{opacity:.35}
+.files{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.fcard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;cursor:pointer;min-width:0;text-align:left;width:100%;background:none}
+.fcard:hover{background:var(--hover)}
+.fcard .fi{width:40px;height:40px;border-radius:10px;background:var(--aw);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:none}
+.fcard .ft{min-width:0;flex:1;line-height:1.3}
+.fcard .ft b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.fcard .ft small{color:var(--sub);font-size:13px}
+.fcard .fx{color:var(--sub);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none}
+.fplayer{width:100%;border-radius:14px;max-height:480px;background:#000;display:block;margin-top:2px}
+audio.fplayer{background:none;height:44px}
+.stabs{display:flex;border-bottom:1px solid var(--line)}
+.flist{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
 .acts{display:flex;justify-content:space-between;margin-top:6px;max-width:440px;color:var(--sub)}
 .act{display:flex;align-items:center;gap:0;font-size:13px;min-width:0;flex:1 1 0}
 .act span:not(.ic){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -354,6 +366,10 @@ const ICONS={
  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
  copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/>',
  dice:'<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/>',
+ clip:'<path d="M20.5 11.5 12.4 19.6a4.9 4.9 0 0 1-6.9-6.9l8.4-8.4a3.3 3.3 0 0 1 4.6 4.6l-8.3 8.3a1.6 1.6 0 0 1-2.3-2.3l7.6-7.6"/>',
+ file:'<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/>',
+ play:'<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
+ music:'<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
  logout:'<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>'
 };
 const ic=(n,c='')=>`<svg class="i ${c}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||''}</svg>`;
@@ -412,6 +428,17 @@ function pickFiles(multiple=true){return new Promise(res=>{const i=document.crea
 function avatar(a,size=40){if(!a)return `<div class="av av-def" style="width:${size}px;height:${size}px"></div>`;if(a.avatar)return `<img class="av" data-img="${a.avatar}" style="width:${size}px;height:${size}px" alt="">`;return `<div class="av av-def" style="width:${size}px;height:${size}px;background:${hashColor(a.id)};font-size:${Math.round(size*.42)}px">${esc([...(a.name||'?')][0]||'?')}</div>`}
 function linkify(t){let s=esc(t);s=s.replace(/https?:\/\/[^\s<>"']+/g,u=>`<a href="${u}" target="_blank" rel="noopener">${u.length>42?u.slice(0,42)+'…':u}</a>`);s=s.replace(/(^|[\s　(（、。])([#＃][\p{L}\p{N}_ー]+)/gu,(m,p,tag)=>`${p}<a href="#/search?q=${encodeURIComponent('#'+tag.slice(1))}">${tag}</a>`);s=s.replace(/(^|[\s　(（])@([A-Za-z0-9_]{1,30})/g,(m,p,h)=>{const a=accByHandle(h);return a?`${p}<a href="#/u/${a.id}">@${h}</a>`:m});return s}
 function mediaHTML(p){const ims=(p.images||[]).filter(i=>D.images[i]&&!D.images[i].deleted).slice(0,4);if(!ims.length)return'';return `<div class="media n${ims.length}">${ims.map((i,k)=>`<img data-img="${i}" data-act="view" data-pid="${p.id}" data-k="${k}" alt="" loading="lazy">`).join('')}</div>`}
+function fmtSize(n){n=+n||0;return n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':n<1073741824?(n/1048576).toFixed(1)+' MB':(n/1073741824).toFixed(2)+' GB'}
+function fileKind(m){m=m||'';return m.startsWith('video/')?'video':m.startsWith('audio/')?'audio':m==='application/pdf'?'pdf':m.startsWith('image/')?'image':'file'}
+const liveFiles=p=>(p.files||[]).filter(i=>D.images[i]&&!D.images[i].deleted);
+function fcardHTML(f,extra=''){const k=fileKind(f.mime);const ext=(f.name||'').split('.').pop().toUpperCase();return `<button class="fcard" data-act="file" data-id="${f.id}"${extra}><span class="fi">${ic(k==='video'?'play':k==='audio'?'music':k==='image'?'image':'file')}</span><span class="ft"><b>${esc(f.name||'ファイル')}</b><small>${fmtSize(f.size)}${ext&&ext.length<6?' · '+esc(ext):''}</small></span><span class="fx">${ic(k==='video'||k==='audio'?'play':'down')}</span></button>`}
+function filesHTML(p){const fs=liveFiles(p);return fs.length?`<div class="files">${fs.map(i=>fcardHTML(D.images[i])).join('')}</div>`:''}
+async function fileBlob(id){let b=await idb.get('blobs',id);if(b)return b;const f=D.images[id];if(!f||!f.driveId)return null;if(!G.token()){toast('Googleに接続すると開けます');return null}toast('ダウンロード中…');try{b=await G.blob(f.driveId);b=new Blob([b],{type:f.mime||b.type});await idb.put('blobs',id,b);return b}catch(e){toast('ファイルを取得できませんでした');return null}}
+async function openFile(el){const id=el.dataset.id,f=D.images[id];if(!f)return;const k=fileKind(f.mime);
+ const save=async()=>{const b=await fileBlob(id);if(b)download(f.name||'file',b)};
+ const open=async()=>{const w=window.open('','_blank');const b=await fileBlob(id);if(!b){w?.close();return}const u=URL.createObjectURL(b);if(w)w.location=u;else location.href=u;setTimeout(()=>URL.revokeObjectURL(u),60000)};
+ const play=async()=>{const b=await fileBlob(id);if(!b)return;const u=URL.createObjectURL(b);const m=document.createElement(k);m.className='fplayer';m.controls=true;m.src=u;m.setAttribute('playsinline','');m.dataset.fid=id;el.replaceWith(m);m.play?.().catch(()=>{})};
+ actionSheet([...(k==='video'||k==='audio'?[{icon:'play',label:'再生',fn:play}]:[{icon:'file',label:'開く',fn:open}]),{icon:'down',label:'保存（ダウンロード）',fn:save}])}
 function cnt(p,k){return (p.counts&&+p.counts[k])||0}
 function actsHTML(p,big){const rc=cnt(p,'reply')+repliesOf(p.id).length;const n=v=>big?'':`<span>${v?fmtNum(v):''}</span>`;return `<div class="acts">
  <button class="act rp" data-act="reply" data-id="${p.id}" title="返信"><span class="ic">${ic('reply')}</span>${n(rc)}</button>
@@ -425,7 +452,7 @@ function postHTML(p,o={}){const a=acc(p.accountId);const par=p.replyTo&&D.posts[
  <div class="prow"><div data-go="#/u/${a.id}">${avatar(a,40)}</div><div class="pb">
  <div class="ph"><span class="nm" data-go="#/u/${a.id}">${esc(a.name)}</span><span class="hd">@${esc(a.handle)}</span><span class="dot">·</span><span class="tm" title="${esc(fullTime(p.createdAt))}">${relTime(p.createdAt)}</span><button class="ibtn more" data-act="more" data-id="${p.id}" aria-label="その他">${ic('more')}</button></div>
  ${pa&&o.showReplyTo!==false?`<div class="rto">返信先: <a href="#/u/${pa.id}">@${esc(pa.handle)}</a>さん</div>`:''}
- <div class="pt">${linkify(p.text||'')}</div>${mediaHTML(p)}${actsHTML(p)}</div></div></article>`}
+ <div class="pt">${linkify(p.text||'')}</div>${mediaHTML(p)}${filesHTML(p)}${actsHTML(p)}</div></div></article>`}
 function refreshPost(id){const p=D.posts[id];for(const el of $$(`.post[data-pid="${id}"]`)){if(!p||p.deleted){el.remove();continue}const anc=el.classList.contains('anc');const pin=!!el.querySelector('.pctx');const t=document.createElement('div');t.innerHTML=postHTML(p,{anc,pinned:pin});const n=t.firstElementChild;el.replaceWith(n);hydrate(n)}const det=$(`.pd[data-pid="${id}"]`);if(det)render()}
 
 /* ========== 無限スクロールのリスト ========== */
@@ -473,7 +500,7 @@ function vPost(r){const p=D.posts[r.arg];if(!p||p.deleted||!acc(p.accountId))ret
  return topBar('ポスト')+anc.map(q=>postHTML(q,{anc:true,showReplyTo:false})).join('')+
  `<div class="pd" data-pid="${p.id}"><div class="ph"><div data-go="#/u/${a.id}">${avatar(a,40)}</div><div class="who" data-go="#/u/${a.id}"><span class="nm">${esc(a.name)}</span><span class="hd">@${esc(a.handle)}</span></div><button class="ibtn more" data-act="more" data-id="${p.id}">${ic('more')}</button></div>
  ${par?`<div class="rto" style="margin-top:8px">返信先: <a href="#/u/${par.accountId}">@${esc(acc(par.accountId).handle)}</a>さん</div>`:''}
- <div class="pt">${linkify(p.text||'')}</div>${mediaHTML(p)}
+ <div class="pt">${linkify(p.text||'')}</div>${mediaHTML(p)}${filesHTML(p)}
  <div class="meta">${fullTime(p.createdAt)}${cnt(p,'view')?` · <b>${fmtNum(cnt(p,'view'))}</b> 件の表示`:''}</div>
  ${stats.length?`<div class="stats">${stats.map(s=>`<span><b>${fmtNum(s[0])}</b> ${s[1]}</span>`).join('')}</div>`:''}
  ${actsHTML(p,true)}</div>
@@ -502,7 +529,7 @@ function vSearch(r){const q=r.q.get('q')||'';
  return head+`<div class="sec-ttl">あなたのトレンド</div>${tr.length?tr.map(([t,n],i)=>`<a class="trend" href="#/search?q=${encodeURIComponent(t)}"><small>${i+1} · トレンド</small><b>${esc(t)}</b><small>${n}件のポスト</small></a>`).join(''):'<div class="empty">#ハッシュタグ を付けてポストすると<br>ここにランキングが表示されます</div>'}`}
 vSearch.after=r=>{const q=(r.q.get('q')||'').trim();if(!q){setTimeout(()=>{if(innerWidth>=700)$('.main .sbox input')?.focus()},50);return}
  let res;if(/^[#＃]/.test(q)){const tag=q.slice(1).toLowerCase();res=livePosts().filter(p=>[...(p.text||'').matchAll(/[#＃]([\p{L}\p{N}_ー]+)/gu)].some(m=>m[1].toLowerCase()===tag))}
- else{const ws=q.toLowerCase().split(/[\s　]+/);res=livePosts().filter(p=>{const a=acc(p.accountId);const h=((p.text||'')+' '+a.name+' @'+a.handle).toLowerCase();return ws.every(w=>h.includes(w))})}
+ else{const ws=q.toLowerCase().split(/[\s　]+/);res=livePosts().filter(p=>{const a=acc(p.accountId);const h=((p.text||'')+' '+a.name+' @'+a.handle+' '+liveFiles(p).map(i=>D.images[i].name||'').join(' ')).toLowerCase();return ws.every(w=>h.includes(w))})}
  mountList(res.sort(byTime),{emptyT:`「${esc(q)}」の検索結果はありません`,emptyS:'別のキーワードで試してください。'})};
 
 function vCal(r){const t=new Date();const y=+(r.q.get('y')||t.getFullYear()),mo=+(r.q.get('m')||t.getMonth()+1);const sel=r.q.get('d')||'';
@@ -517,8 +544,10 @@ function vCal(r){const t=new Date();const y=+(r.q.get('y')||t.getFullYear()),mo=
 vCal.after=r=>{const sel=r.q.get('d');if(!sel)return;mountList(livePosts().filter(p=>ymd(p.createdAt)===sel&&(S.allAccounts||p.accountId===cur().id)).sort((a,b)=>a.createdAt-b.createdAt),{emptyT:'この日のポストはありません',emptyS:''})};
 
 function mediaList(){const out=[];for(const p of livePosts().sort((a,b)=>b.createdAt-a.createdAt))for(const i of p.images||[])if(D.images[i]&&!D.images[i].deleted)out.push([i,p.id]);return out}
-function vMedia(){const l=mediaList();return `<div class="top"><div class="tbar"><button class="ibtn" data-act="drawer" style="width:32px;height:32px">${avatar(cur(),32)}</button><div class="ttl">ストレージ<small>${l.length}枚の画像</small></div></div></div>
- ${l.length?`<div class="mgrid">${l.map(([i,pid],k)=>`<img data-img="${i}" data-act="view-all" data-k="${k}" loading="lazy" alt="">`).join('')}</div>`:'<div class="empty"><b>画像はまだありません</b>ポストに画像を添付するとここに一覧表示されます。</div>'}`}
+function fileList(){const out=[];for(const p of livePosts().sort((a,b)=>b.createdAt-a.createdAt))for(const i of liveFiles(p))out.push([i,p.id]);return out}
+function vMedia(r){const l=mediaList(),fl=fileList();const tab=r?.q.get('t')||'img';return `<div class="top"><div class="tbar"><button class="ibtn" data-act="drawer" style="width:32px;height:32px">${avatar(cur(),32)}</button><div class="ttl">ストレージ<small>画像 ${l.length}枚 · ファイル ${fl.length}個</small></div></div><div class="tabs"><button class="${tab==='img'?'on':''}" data-go="#/media">画像</button><button class="${tab==='files'?'on':''}" data-go="#/media?t=files">ファイル</button></div></div>
+ ${tab==='files'?(fl.length?`<div class="flist">${fl.map(([i,pid])=>`<div>${fcardHTML(D.images[i])}<a class="note" style="padding:4px 4px 0;display:block" href="#/post/${pid}">ポストを見る</a></div>`).join('')}</div>`:'<div class="empty"><b>ファイルはまだありません</b>投稿画面のクリップボタンからファイルを添付できます。</div>'):''}
+ ${tab!=='img'?'':l.length?`<div class="mgrid">${l.map(([i,pid],k)=>`<img data-img="${i}" data-act="view-all" data-k="${k}" loading="lazy" alt="">`).join('')}</div>`:'<div class="empty"><b>画像はまだありません</b>ポストに画像を添付するとここに一覧表示されます。</div>'}`}
 function vBookmarks(){return topBar('ブックマーク','@'+esc(cur().handle))+'<div id="list"></div>'}
 vBookmarks.after=()=>mountList(livePosts().filter(p=>p.bm).sort(byTime),{emptyT:'ポストを保存して後で見る',emptyS:'ポストのブックマークアイコンをタップすると、ここに表示されます。'});
 
@@ -601,30 +630,30 @@ document.addEventListener('keydown',e=>{const v=$('.viewer');if(e.key==='Escape'
 function genCounts(i){const [mn,mx]=S.presets[i]||[0,10];const lo=Math.min(+mn,+mx),hi=Math.max(+mn,+mx);const like=hi>lo*10&&lo>0?Math.round(Math.exp(Math.log(lo)+Math.random()*(Math.log(hi)-Math.log(lo)))):randInt(lo,hi);
  return{like,rt:Math.round(like*(.05+Math.random()*.25)),reply:Math.round(like*(.01+Math.random()*.07)),view:Math.round(like*(15+Math.random()*45))+randInt(like?10:0,like?80:15)}}
 function openCompose(o={}){const ed=o.editId&&D.posts[o.editId];
- const st={acc:ed?ed.accountId:(o.accountId||cur().id),text:ed?ed.text:'',imgs:ed?[...(ed.images||[])].filter(i=>D.images[i]&&!D.images[i].deleted):[],added:[],at:ed?ed.createdAt:null,
+ const st={acc:ed?ed.accountId:(o.accountId||cur().id),text:ed?ed.text:'',imgs:ed?[...(ed.images||[])].filter(i=>D.images[i]&&!D.images[i].deleted):[],files:ed?liveFiles(ed):[],fmeta:{},added:[],at:ed?ed.createdAt:null,
   counts:ed?{reply:0,rt:0,like:0,view:0,...ed.counts}:(S.autoPreset>=0?genCounts(S.autoPreset):{reply:0,rt:0,like:0,view:0}),replyTo:ed?ed.replyTo:(o.replyTo||null),panel:null};
  const par=st.replyTo&&D.posts[st.replyTo];const pa=par&&acc(par.accountId);
  const l=openLayer(`<div class="backdrop"></div><div class="sheet"><div class="sh"><button class="ibtn" data-c="cancel">${ic('close')}</button><div class="sp"></div><button class="pill" data-c="post">${ed?'保存':st.replyTo?'返信':'ポストする'}</button></div>
  <div class="sbody">${par?`<div style="opacity:.85">${postHTML(par,{showReplyTo:false}).replace('class="post"','class="post anc" style="padding:8px 0 0;pointer-events:none"')}</div>`:''}
  <div class="cmp"><div class="left"><button data-c="accs" title="投稿するアカウント" class="cav"></button><div class="accpick" hidden></div></div><div style="flex:1;min-width:0">
- ${pa?`<div class="rt-to">返信先: <a>@${esc(pa.handle)}</a>さん</div>`:''}<textarea placeholder="${st.replyTo?'返信をポスト':'いまどうしてる？'}"></textarea><div class="thumbs"></div><div class="cpanels"></div></div></div></div>
- <div class="ctool"><button class="ibtn" data-c="img" title="画像">${ic('image')}</button><button class="ibtn" data-c="time" title="日時を指定">${ic('clock')}</button><button class="ibtn" data-c="nums" title="反応の数">${ic('heart')}</button><button class="ibtn" data-c="dice" title="ランダムな反応数">${ic('dice')}</button><span class="sp"></span><span class="ccount"></span><svg class="ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="var(--line)" stroke-width="2.4"/><circle class="rg" cx="13" cy="13" r="10" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-dasharray="62.83" stroke-dashoffset="62.83" transform="rotate(-90 13 13)"/></svg></div></div>`);
+ ${pa?`<div class="rt-to">返信先: <a>@${esc(pa.handle)}</a>さん</div>`:''}<textarea placeholder="${st.replyTo?'返信をポスト':'いまどうしてる？'}"></textarea><div class="thumbs"></div><div class="files cfiles"></div><div class="cpanels"></div></div></div></div>
+ <div class="ctool"><button class="ibtn" data-c="img" title="画像">${ic('image')}</button><button class="ibtn" data-c="file" title="ファイル">${ic('clip')}</button><button class="ibtn" data-c="time" title="日時を指定">${ic('clock')}</button><button class="ibtn" data-c="nums" title="反応の数">${ic('heart')}</button><button class="ibtn" data-c="dice" title="ランダムな反応数">${ic('dice')}</button><span class="sp"></span><span class="ccount"></span><svg class="ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="var(--line)" stroke-width="2.4"/><circle class="rg" cx="13" cy="13" r="10" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-dasharray="62.83" stroke-dashoffset="62.83" transform="rotate(-90 13 13)"/></svg></div></div>`);
  if(par)hydrate(l);
  const ta=$('textarea',l),postB=$('[data-c=post]',l);ta.value=st.text;
- const upd=()=>{const n=[...ta.value].length;postB.disabled=!ta.value.trim()&&!st.imgs.length;const r=Math.min(1,n/140);const rg=$('.rg',l);rg.setAttribute('stroke-dashoffset',62.83*(1-r));rg.setAttribute('stroke',n>140?'#f4212e':n>120?'#ffd400':'var(--accent)');$('.ccount',l).textContent=n>120?n:'';ta.style.height='auto';ta.style.height=Math.max(120,ta.scrollHeight)+'px'};
+ const upd=()=>{const n=[...ta.value].length;postB.disabled=!ta.value.trim()&&!st.imgs.length&&!st.files.length;const r=Math.min(1,n/140);const rg=$('.rg',l);rg.setAttribute('stroke-dashoffset',62.83*(1-r));rg.setAttribute('stroke',n>140?'#f4212e':n>120?'#ffd400':'var(--accent)');$('.ccount',l).textContent=n>120?n:'';ta.style.height='auto';ta.style.height=Math.max(120,ta.scrollHeight)+'px'};
  const drawAv=()=>{$('.cav',l).innerHTML=avatar(acc(st.acc),40);hydrate($('.cav',l))};
- const drawThumbs=()=>{const t=$('.thumbs',l);t.className='thumbs'+(st.imgs.length===1?' n1':'');t.innerHTML=st.imgs.map((id,i)=>`<div class="thumb"><img data-img="${id}" alt=""><button data-c="rm" data-i="${i}">${ic('close')}</button></div>`).join('');hydrate(t);upd()};
+ const drawThumbs=()=>{const t=$('.thumbs',l);t.className='thumbs'+(st.imgs.length===1?' n1':'');t.innerHTML=st.imgs.map((id,i)=>`<div class="thumb"><img data-img="${id}" alt=""><button data-c="rm" data-i="${i}">${ic('close')}</button></div>`).join('');hydrate(t);const fc=$('.cfiles',l);fc.innerHTML=st.files.map((id,i)=>{const f=D.images[id]||{id,...st.fmeta[id]};return fcardHTML(f).replace('data-act="file"','data-c="none"').replace(/<span class="fx">[\s\S]*?<\/span><\/button>$/,`<span class="fx" data-c="rmf" data-i="${i}">${ic('close')}</span></button>`)}).join('');upd()};
  const drawPanels=()=>{const p=$('.cpanels',l);let h='';
   if(st.panel==='time')h=`<div class="cpanel"><div class="ttl">${ic('clock')}日時を指定</div><div class="row"><input type="datetime-local" class="dtin" value="${st.at?toLocalInput(st.at):''}" data-c-in="at"><button class="chip" data-c="now">現在時刻</button></div><div class="note" style="padding:6px 0 0">空欄のときはポストした時刻になります</div></div>`;
   if(st.panel==='nums')h=`<div class="cpanel"><div class="ttl">${ic('heart')}反応の数</div><div class="row">${[['reply','返信'],['rt','リポスト'],['like','いいね'],['view','表示']].map(([k,lb])=>`<label>${lb}<input type="number" min="0" inputmode="numeric" value="${st.counts[k]||0}" data-c-in="${k}"></label>`).join('')}</div><div class="row" style="margin-top:10px">${['少なめ','ふつう','バズ'].map((x,i)=>`<button class="chip" data-c="gen" data-i="${i}">${ic('dice')} ${x}</button>`).join('')}<button class="chip" data-c="zero">0に戻す</button></div></div>`;
   p.innerHTML=h};
  drawAv();drawThumbs();drawPanels();setTimeout(()=>ta.focus(),60);ta.addEventListener('input',upd);
  const cancel=async()=>{if((ta.value.trim()&&ta.value!==st.text||st.added.length)&&!confirm('編集中の内容を破棄しますか？'))return;for(const id of st.added)await idb.del('blobs',id);closeLayer(l)};
- const submit=()=>{const text=ta.value.replace(/\s+$/,'');if(!text.trim()&&!st.imgs.length)return;
-  for(const id of st.added){if(st.imgs.includes(id))registerImage(id,st.mimes?.[id]||'image/jpeg');else idb.del('blobs',id)}
+ const submit=()=>{const text=ta.value.replace(/\s+$/,'');if(!text.trim()&&!st.imgs.length&&!st.files.length)return;
+  for(const id of st.added){if(st.imgs.includes(id))registerImage(id,st.mimes?.[id]||'image/jpeg');else if(st.files.includes(id))D.images[id]={id,kind:'file',...st.fmeta[id],driveId:null,updatedAt:now()};else idb.del('blobs',id)}
   const c={};for(const k of ['reply','rt','like','view'])c[k]=Math.max(0,parseInt(st.counts[k])||0);
-  if(ed){for(const i of ed.images||[])if(!st.imgs.includes(i))killImage(i);Object.assign(ed,{text,images:st.imgs,accountId:st.acc,counts:c,createdAt:st.at||ed.createdAt});upsert('posts',ed);toast('ポストを更新しました')}
-  else{const p={id:uid(),accountId:st.acc,text,images:st.imgs,createdAt:st.at||now(),replyTo:st.replyTo,counts:c,liked:false,rted:false,bm:false,pinned:false};upsert('posts',p);toast(st.replyTo?'返信しました':'ポストしました')}
+  if(ed){for(const i of ed.images||[])if(!st.imgs.includes(i))killImage(i);for(const i of ed.files||[])if(!st.files.includes(i))killImage(i);Object.assign(ed,{text,images:st.imgs,files:st.files,accountId:st.acc,counts:c,createdAt:st.at||ed.createdAt});upsert('posts',ed);toast('ポストを更新しました')}
+  else{const p={id:uid(),accountId:st.acc,text,images:st.imgs,files:st.files,createdAt:st.at||now(),replyTo:st.replyTo,counts:c,liked:false,rted:false,bm:false,pinned:false};upsert('posts',p);toast(st.replyTo?'返信しました':'ポストしました')}
   closeLayer(l);render()};
  l.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submit()}if(e.key==='Escape'){e.stopPropagation();cancel()}});
  l.addEventListener('input',e=>{const k=e.target.dataset.cIn;if(!k)return;if(k==='at')st.at=e.target.value?new Date(e.target.value).getTime():null;else st.counts[k]=e.target.value});
@@ -634,6 +663,9 @@ function openCompose(o={}){const ed=o.editId&&D.posts[o.editId];
   else if(c==='accs'){pk.innerHTML=liveAccs().map(a=>`<button class="dacc" data-c="pick" data-id="${a.id}">${avatar(a,36)}<span class="t"><b>${esc(a.name)}</b><span>@${esc(a.handle)}</span></span>${a.id===st.acc?`<span class="ck">${ic('check')}</span>`:''}</button>`).join('');hydrate(pk);pk.hidden=!pk.hidden}
   else if(c==='pick'){st.acc=b.dataset.id;pk.hidden=true;drawAv()}
   else if(c==='img'){if(st.imgs.length>=4)return toast('画像は4枚まで添付できます');const fs=(await pickFiles(true)).slice(0,4-st.imgs.length);st.mimes=st.mimes||{};for(const f of fs){const r=await storeImage(f);st.imgs.push(r.id);st.added.push(r.id);st.mimes[r.id]=r.mime}drawThumbs()}
+  else if(c==='file'){if(st.files.length>=10)return toast('ファイルは10個まで添付できます');const i=document.createElement('input');i.type='file';i.multiple=true;const fs=await new Promise(r=>{i.onchange=()=>r([...i.files]);i.click()});
+   for(const f of fs.slice(0,10-st.files.length)){if(f.size>200*1048576){toast(`${f.name} は大きすぎます（200MBまで）`);continue}const id=uid();await idb.put('blobs',id,f.slice(0,f.size,f.type||'application/octet-stream'));st.files.push(id);st.added.push(id);st.fmeta[id]={name:f.name,mime:f.type||'application/octet-stream',size:f.size}}drawThumbs()}
+  else if(c==='rmf'){st.files.splice(+b.dataset.i,1);drawThumbs()}
   else if(c==='rm'){st.imgs.splice(+b.dataset.i,1);drawThumbs()}
   else if(c==='time'||c==='nums'){st.panel=st.panel===c?null:c;drawPanels()}
   else if(c==='now'){st.at=null;drawPanels()}
@@ -656,7 +688,7 @@ function openAccEdit(id){const isNew=!id;const a=isNew?newAccount({name:'',handl
  l.addEventListener('click',async e=>{const b=e.target.closest('[data-e]');if(!b)return;const c=b.dataset.e;
   if(c==='cancel')close(false);
   else if(c==='header'||c==='avatar'){const [f]=await pickFiles(false);if(!f)return;const r=await storeImage(f,c==='avatar'?600:1500);added.push(r);a[c]=r.id;draw()}
-  else if(c==='del'){if(!confirm(`@${a.handle} を削除しますか？\nこのアカウントのポストもすべて削除されます。`))return;const t=D.accounts[a.id];t.deleted=true;t.updatedAt=now();for(const p of Object.values(D.posts))if(p.accountId===a.id&&!p.deleted){p.deleted=true;p.updatedAt=now();(p.images||[]).forEach(killImage)}if(t.avatar)killImage(t.avatar);if(t.header)killImage(t.header);if(S.current===a.id){S.current=liveAccs()[0].id;saveS()}save();close(true);location.hash='#/home';render()}
+  else if(c==='del'){if(!confirm(`@${a.handle} を削除しますか？\nこのアカウントのポストもすべて削除されます。`))return;const t=D.accounts[a.id];t.deleted=true;t.updatedAt=now();for(const p of Object.values(D.posts))if(p.accountId===a.id&&!p.deleted){p.deleted=true;p.updatedAt=now();(p.images||[]).forEach(killImage);(p.files||[]).forEach(killImage)}if(t.avatar)killImage(t.avatar);if(t.header)killImage(t.header);if(S.current===a.id){S.current=liveAccs()[0].id;saveS()}save();close(true);location.hash='#/home';render()}
   else if(c==='save'){const v=n=>$(`[name=${n}]`,l).value.trim();const h=v('handle').replace(/^@/,'').replace(/[^A-Za-z0-9_]/g,'');
    if(!v('name'))return toast('名前を入力してください');if(!h)return toast('ユーザー名は半角英数字と _ で入力してください');
    if(liveAccs().some(x=>x.id!==a.id&&x.handle.toLowerCase()===h.toLowerCase()))return toast('そのユーザー名は既に使われています');
@@ -684,9 +716,10 @@ function doAct(a,el,e){const id=el.dataset.id;const p=id&&D.posts[id];
    ...(!p.replyTo?[{icon:'pin',label:p.pinned?'プロフィールへの固定を解除':'プロフィールに固定する',fn:()=>{for(const q of Object.values(D.posts))if(q.pinned&&q.accountId===p.accountId&&q!==p){q.pinned=false;q.updatedAt=now()}p.pinned=!p.pinned;upsert('posts',p);toast(p.pinned?'固定しました':'固定を解除しました');render()}}]:[]),
    {icon:'pen',label:'編集',fn:()=>openCompose({editId:id})},
    {icon:'copy',label:'テキストをコピー',fn:()=>navigator.clipboard?.writeText(p.text||'').then(()=>toast('コピーしました'))},
-   {icon:'trash',label:'削除',danger:true,fn:()=>{const rs=repliesOf(id).length;if(!confirm(rs?`このポストを削除しますか？\n（返信 ${rs}件 は残ります）`:'このポストを削除しますか？'))return;p.deleted=true;(p.images||[]).forEach(killImage);upsert('posts',p);toast('削除しました');if(route().name==='post'&&route().arg===id)history.back();else render()}}]);break;
+   {icon:'trash',label:'削除',danger:true,fn:()=>{const rs=repliesOf(id).length;if(!confirm(rs?`このポストを削除しますか？\n（返信 ${rs}件 は残ります）`:'このポストを削除しますか？'))return;p.deleted=true;(p.images||[]).forEach(killImage);(p.files||[]).forEach(killImage);upsert('posts',p);toast('削除しました');if(route().name==='post'&&route().arg===id)history.back();else render()}}]);break;
  case'view':{const p=D.posts[el.dataset.pid];const imgs=(p.images||[]).filter(i=>D.images[i]&&!D.images[i].deleted).map(i=>[i,p.id]);openViewer(imgs,+el.dataset.k);break}
  case'view-all':openViewer(mediaList(),+el.dataset.k);break;
+ case'file':openFile(el);break;
  case'acc-switch':S.current=id;saveS();closeLayers();toast('@'+acc(id).handle+' に切り替えました');render();break;
  case'acc-new':closeLayers();openAccEdit();break;
  case'acc-edit':closeLayers();openAccEdit(id);break;
@@ -701,7 +734,7 @@ function doAct(a,el,e){const id=el.dataset.id;const p=id&&D.posts[id];
 document.addEventListener('click',e=>{const t=e.target;if(t.closest('.sheet,.modal,.viewer'))return;
  const a=t.closest('[data-act]');if(a){e.preventDefault();doAct(a.dataset.act,a,e);return}
  const g=t.closest('[data-go]');if(g){e.preventDefault();if(location.hash===g.dataset.go)closeLayers();else location.hash=g.dataset.go;return}
- if(t.closest('a,button,input,textarea,label'))return;
+ if(t.closest('a,button,input,textarea,label,video,audio'))return;
  const p=t.closest('.post[data-pid]');if(p&&!t.closest('.layer')&&!getSelection().toString()){location.hash='#/post/'+p.dataset.pid}});
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-form=search]');if(!f)return;e.preventDefault();const q=f.q.value.trim();if(q)location.hash='#/search?q='+encodeURIComponent(q)});
 document.addEventListener('change',e=>{const el=e.target;const k=el.dataset.set;
@@ -764,6 +797,7 @@ const G={
  async upload(meta,blob,id){const b='tnb'+uid();const body=new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: ${blob.type||'application/octet-stream'}\r\n\r\n`,blob,`\r\n--${b}--`]);
   const url=id?`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart&fields=id`:`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`;
   return (await this.api(url,{method:id?'PATCH':'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body})).json()},
+ async uploadBig(meta,blob){const t=this.token();if(!t)throw new Error('auth');const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id',{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json; charset=UTF-8','X-Upload-Content-Type':blob.type||'application/octet-stream','X-Upload-Content-Length':String(blob.size)},body:JSON.stringify(meta)});if(r.status===401){localStorage.removeItem('tn_gtoken');throw new Error('auth')}if(!r.ok)throw new Error('HTTP '+r.status);const loc=r.headers.get('Location');if(!loc)throw new Error('upload location missing');const u=await fetch(loc,{method:'PUT',headers:{'Content-Type':blob.type||'application/octet-stream'},body:blob});if(!u.ok)throw new Error('HTTP '+u.status);return u.json()},
  async remove(id){try{await this.api(`https://www.googleapis.com/drive/v3/files/${id}`,{method:'DELETE'})}catch(e){if(!/HTTP 404/.test(e.message))throw e}}
 };
 let SYNC={busy:false,pending:false,err:null,timer:null};
@@ -785,8 +819,8 @@ async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;
   for(const im of Object.values(D.images)){
    if(im.deleted){if(im.driveId){await G.remove(im.driveId);im.driveId=null;im.updatedAt=now()}await idb.del('blobs',im.id);continue}
    const b=await idb.get('blobs',im.id);
-   if(b&&!im.driveId){const r=await G.upload({name:'img_'+im.id,parents:['appDataFolder']},b);im.driveId=r.id;im.updatedAt=now()}
-   else if(!b&&im.driveId)downloads.push(im)}
+   if(b&&!im.driveId){const r=await (b.size>4*1048576?G.uploadBig:G.upload).call(G,{name:(im.kind==='file'?'file_':'img_')+im.id,parents:['appDataFolder']},b);im.driveId=r.id;im.updatedAt=now()}
+   else if(!b&&im.driveId&&im.kind!=='file')downloads.push(im)}
   const q=[...downloads];await Promise.all([0,1,2,3].map(async()=>{while(q.length){const im=q.shift();try{await idb.put('blobs',im.id,await G.blob(im.driveId))}catch(e){console.warn('画像取得失敗',im.id,e)}}}));
   await idb.put('kv','data',D);
   const body=new Blob([JSON.stringify(D)],{type:'application/json'});
