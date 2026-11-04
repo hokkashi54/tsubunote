@@ -796,8 +796,18 @@ async function sync(manual){if(!S.linked)return;if(SYNC.busy){SYNC.pending=true;
   if((changed||downloads.length)&&!$('.layer'))softRender()}
  catch(e){console.error(e);if(e.message!=='auth')SYNC.err=e.message.slice(0,80);if(manual&&e.message!=='auth')toast('同期に失敗しました')}
  finally{SYNC.busy=false;SYNC.manual=false;updSyncUI();if(SYNC.pending){SYNC.pending=false;setTimeout(()=>sync(false),400)}}}
-function maybeSilentLogin(){if(!S.linked||!S.autoSync||!S.clientId||G.token()||$('.layer'))return false;if(G.authError)return false;if(now()-(+localStorage.getItem('tn_lastauth')||0)<10*60000)return false;G.login(true);return true}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(G.token())sync(false);else if(!maybeSilentLogin())updSyncUI()});
+/* --- 有効期限の自動更新：操作していない安全なタイミングで裏で再接続 --- */
+let lastInteract=0;['pointerdown','keydown','touchstart','wheel'].forEach(n=>addEventListener(n,()=>{lastInteract=now()},{passive:true,capture:true}));
+function tokenLeft(){try{const t=JSON.parse(localStorage.getItem('tn_gtoken')||'null');return t?t.exp-now():-1}catch(e){return -1}}
+function autoRefresh(force){if(!S.linked||!S.autoSync||!S.clientId||G.authError)return false;const left=tokenLeft();if(left>8*60000)return false;
+ if(now()-(+localStorage.getItem('tn_lastauth')||0)<5*60000)return false;
+ if($('.layer')||$('.viewer')||SYNC.busy||/INPUT|TEXTAREA/.test(document.activeElement?.tagName||''))return false;
+ const hidden=document.visibilityState!=='visible';const idle=now()-lastInteract;
+ if(!force&&!hidden&&idle<(left>0?30000:5000))return false;
+ try{sessionStorage.setItem('tn_scroll',JSON.stringify({h:location.hash,y:scrollY,n:LIST?.shown||0}))}catch(e){}
+ G.login(true);return true}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){autoRefresh(true);return}if(G.token())sync(false);else if(!autoRefresh(true))updSyncUI()});
+setInterval(()=>{if(!autoRefresh(false)&&document.visibilityState==='visible'&&G.token()&&!SYNC.busy)sync(false)},30000);
 setInterval(()=>{if(document.visibilityState==='visible'&&G.token()&&!SYNC.busy)sync(false)},5*60000);
 
 /* ========== 起動 ========== */
@@ -805,7 +815,8 @@ setInterval(()=>{if(document.visibilityState==='visible'&&G.token()&&!SYNC.busy)
  const redirected=G.handleRedirect();curHash=location.hash;
  ensureAccount();render();navigator.storage?.persist?.();
  if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
- if(G.token())sync(false);else if(!redirected)maybeSilentLogin();
+ try{const m=JSON.parse(sessionStorage.getItem('tn_scroll')||'null');sessionStorage.removeItem('tn_scroll');if(m&&(m.h||'#/home')===(location.hash||'#/home')){if(LIST&&m.n>LIST.shown)moreList(m.n-LIST.shown);scrollTo(0,m.y)}}catch(e){}
+ if(G.token())sync(false);else if(!redirected)autoRefresh(true);
  })();
 </script>
 </body>
