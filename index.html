@@ -484,7 +484,10 @@ function rcol(){const el=$('#rcol');if(getComputedStyle(el).display==='none'){el
 function softRender(){const n=LIST?.shown||0,y=scrollY;render();if(LIST&&n>LIST.shown)moreList(n-LIST.shown);scrollTo(0,y)}
 window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(rcol,200)});
 
-function homeItems(){const c=cur();return livePosts().filter(p=>(S.showReplies||!p.replyTo)&&(S.allAccounts||p.accountId===c.id)).sort(byTime)}
+const isMuted=p=>{const a=acc(p.accountId);return !!(a&&a.muted&&a.id!==S.current)};
+const visPosts=()=>livePosts().filter(p=>!isMuted(p));
+function toggleMute(id){const a=D.accounts[id];if(!a)return;if(id===cur().id&&!a.muted)return toast('使用中のアカウントはミュートできません');a.muted=!a.muted;upsert('accounts',a);toast(a.muted?`@${a.handle} さんをミュートしました`:`@${a.handle} さんのミュートを解除しました`);softRender()}
+function homeItems(){const c=cur();return visPosts().filter(p=>(S.showReplies||!p.replyTo)&&(S.allAccounts||p.accountId===c.id)).sort(byTime)}
 function vHome(){const c=cur();const st=syncState();
  return `<div class="top"><div class="tbar"><button class="ibtn" data-act="drawer" aria-label="メニュー" style="width:32px;height:32px">${avatar(c,32)}</button><div class="brand">${ic('bubble')}</div><div class="tright">${syncBtn()}<button class="ibtn" data-act="sort" title="${S.sort==='desc'?'新しい順':'古い順'}">${ic(S.sort==='desc'?'sortd':'sortu')}</button></div></div>
  <div class="tabs"><button class="${S.allAccounts?'on':''}" data-act="tab" data-v="1">すべて</button><button class="${S.allAccounts?'':'on'}" data-act="tab" data-v="0">${esc(c.name)}</button></div></div>
@@ -510,8 +513,8 @@ vPost.after=r=>{const p=D.posts[r.arg];if(!p||p.deleted)return;mountList(replies
 function vProfile(r){const a=acc(r.arg)||cur();const tab=r.q.get('t')||'posts';const mine=livePosts().filter(p=>p.accountId===a.id);const j=new Date(a.joined);
  const tabs=[['posts','ポスト'],['replies','返信'],['media','メディア'],['likes','いいね']];
  return topBar(esc(a.name),`${mine.filter(p=>!p.replyTo).length.toLocaleString()} 件のポスト`)+
- `<div class="pbanner">${a.header?`<img data-img="${a.header}" alt="">`:''}</div><div class="phead">${avatar(a,134)}<button class="pill ghost edit" data-act="acc-edit" data-id="${a.id}">プロフィールを編集</button>
- <span class="nm">${esc(a.name)}</span><span class="hd">@${esc(a.handle)}</span>${a.bio?`<div class="bio">${linkify(a.bio)}</div>`:''}
+ `<div class="pbanner">${a.header?`<img data-img="${a.header}" alt="">`:''}</div><div class="phead">${avatar(a,134)}<span class="edit" style="display:flex;gap:8px">${a.id!==cur().id?`<button class="ibtn" style="border:1px solid var(--line);width:38px;height:38px" data-act="pmore" data-id="${a.id}" aria-label="その他">${ic('more')}</button>`:''}<button class="pill ghost" data-act="acc-edit" data-id="${a.id}">プロフィールを編集</button></span>
+ <span class="nm">${esc(a.name)}${a.muted?` <small class="hd" style="font-size:13px;font-weight:400">🔇 ミュート中</small>`:''}</span><span class="hd">@${esc(a.handle)}</span>${a.bio?`<div class="bio">${linkify(a.bio)}</div>`:''}
  <div class="jn">${ic('cal')} ${j.getFullYear()}年${j.getMonth()+1}月から利用しています</div>
  <div class="ff"><span><b>${fmtNum(a.following)}</b> フォロー中</span><span><b>${fmtNum(a.followers)}</b> フォロワー</span></div></div>
  <div class="tabs" style="border-bottom:1px solid var(--line)">${tabs.map(([k,l])=>`<button class="${tab===k?'on':''}" data-go="#/u/${a.id}?t=${k}">${l}</button>`).join('')}</div><div id="list"></div>`}
@@ -521,19 +524,19 @@ vProfile.after=r=>{const a=acc(r.arg)||cur();const tab=r.q.get('t')||'posts';let
  else if(tab==='media')mountList(mine.filter(p=>(p.images||[]).length),{emptyT:'メディアはまだありません'});
  else mountList(livePosts().filter(p=>p.liked).sort(byTime),{emptyT:'いいねしたポストはまだありません'})};
 
-function trends(){const m=new Map();for(const p of livePosts()){const seen=new Set();for(const t of (p.text||'').matchAll(/(?:^|[\s　(（、。])[#＃]([\p{L}\p{N}_ー]+)/gu)){const k='#'+t[1];if(seen.has(k))continue;seen.add(k);m.set(k,(m.get(k)||0)+1)}}return [...m].sort((a,b)=>b[1]-a[1])}
+function trends(){const m=new Map();for(const p of visPosts()){const seen=new Set();for(const t of (p.text||'').matchAll(/(?:^|[\s　(（、。])[#＃]([\p{L}\p{N}_ー]+)/gu)){const k='#'+t[1];if(seen.has(k))continue;seen.add(k);m.set(k,(m.get(k)||0)+1)}}return [...m].sort((a,b)=>b[1]-a[1])}
 function vSearch(r){const q=r.q.get('q')||'';
  const head=`<div class="top"><div class="tbar">${q?`<button class="ibtn" data-act="back">${ic('back')}</button>`:''}<form class="sbox" data-form="search">${ic('search')}<input name="q" type="search" placeholder="メモを検索" value="${esc(q)}" enterkeyhint="search"></form></div></div>`;
  if(q)return head+'<div id="list"></div>';
  const tr=trends().slice(0,20);
  return head+`<div class="sec-ttl">あなたのトレンド</div>${tr.length?tr.map(([t,n],i)=>`<a class="trend" href="#/search?q=${encodeURIComponent(t)}"><small>${i+1} · トレンド</small><b>${esc(t)}</b><small>${n}件のポスト</small></a>`).join(''):'<div class="empty">#ハッシュタグ を付けてポストすると<br>ここにランキングが表示されます</div>'}`}
 vSearch.after=r=>{const q=(r.q.get('q')||'').trim();if(!q){setTimeout(()=>{if(innerWidth>=700)$('.main .sbox input')?.focus()},50);return}
- let res;if(/^[#＃]/.test(q)){const tag=q.slice(1).toLowerCase();res=livePosts().filter(p=>[...(p.text||'').matchAll(/[#＃]([\p{L}\p{N}_ー]+)/gu)].some(m=>m[1].toLowerCase()===tag))}
- else{const ws=q.toLowerCase().split(/[\s　]+/);res=livePosts().filter(p=>{const a=acc(p.accountId);const h=((p.text||'')+' '+a.name+' @'+a.handle+' '+liveFiles(p).map(i=>D.images[i].name||'').join(' ')).toLowerCase();return ws.every(w=>h.includes(w))})}
+ let res;if(/^[#＃]/.test(q)){const tag=q.slice(1).toLowerCase();res=visPosts().filter(p=>[...(p.text||'').matchAll(/[#＃]([\p{L}\p{N}_ー]+)/gu)].some(m=>m[1].toLowerCase()===tag))}
+ else{const ws=q.toLowerCase().split(/[\s　]+/);res=visPosts().filter(p=>{const a=acc(p.accountId);const h=((p.text||'')+' '+a.name+' @'+a.handle+' '+liveFiles(p).map(i=>D.images[i].name||'').join(' ')).toLowerCase();return ws.every(w=>h.includes(w))})}
  mountList(res.sort(byTime),{emptyT:`「${esc(q)}」の検索結果はありません`,emptyS:'別のキーワードで試してください。'})};
 
 function vCal(r){const t=new Date();const y=+(r.q.get('y')||t.getFullYear()),mo=+(r.q.get('m')||t.getMonth()+1);const sel=r.q.get('d')||'';
- const counts={};for(const p of livePosts()){if(!S.allAccounts&&p.accountId!==cur().id)continue;const k=ymd(p.createdAt);counts[k]=(counts[k]||0)+1}
+ const counts={};for(const p of visPosts()){if(!S.allAccounts&&p.accountId!==cur().id)continue;const k=ymd(p.createdAt);counts[k]=(counts[k]||0)+1}
  const first=new Date(y,mo-1,1),days=new Date(y,mo,0).getDate();const pv=new Date(y,mo-2,1),nx=new Date(y,mo,1);let cells='',mon=0;
  for(let i=0;i<first.getDay();i++)cells+='<div class="cal-d out"></div>';
  for(let d=1;d<=days;d++){const k=`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const n=counts[k]||0;mon+=n;cells+=`<button class="cal-d ${k===ymd(t)?'today':''} ${k===sel?'sel':''}" data-go="#/cal?y=${y}&m=${mo}&d=${k}">${d}${n?`<i class="${n>=5?'b3':n>=2?'b2':''}"></i>`:'<i style="visibility:hidden"></i>'}</button>`}
@@ -541,7 +544,7 @@ function vCal(r){const t=new Date();const y=+(r.q.get('y')||t.getFullYear()),mo=
  <div class="cal"><div class="cal-h"><button class="ibtn" data-go="#/cal?y=${pv.getFullYear()}&m=${pv.getMonth()+1}">${ic('left')}</button><b>${y}年${mo}月</b><button class="ibtn" data-go="#/cal?y=${nx.getFullYear()}&m=${nx.getMonth()+1}">${ic('right')}</button></div>
  <div class="cal-g">${'日月火水木金土'.split('').map(w=>`<div class="wd">${w}</div>`).join('')}${cells}</div><div class="cal-sum">${mo}月のポスト: ${mon}件${S.allAccounts?'':'（'+esc(cur().name)+'のみ）'}</div></div>
  ${sel?`<div class="sec-ttl" style="font-size:1.05em">${+sel.slice(5,7)}月${+sel.slice(8)}日のポスト</div>`:''}<div id="list"></div>`}
-vCal.after=r=>{const sel=r.q.get('d');if(!sel)return;mountList(livePosts().filter(p=>ymd(p.createdAt)===sel&&(S.allAccounts||p.accountId===cur().id)).sort((a,b)=>a.createdAt-b.createdAt),{emptyT:'この日のポストはありません',emptyS:''})};
+vCal.after=r=>{const sel=r.q.get('d');if(!sel)return;mountList(visPosts().filter(p=>ymd(p.createdAt)===sel&&(S.allAccounts||p.accountId===cur().id)).sort((a,b)=>a.createdAt-b.createdAt),{emptyT:'この日のポストはありません',emptyS:''})};
 
 function mediaList(){const out=[];for(const p of livePosts().sort((a,b)=>b.createdAt-a.createdAt))for(const i of p.images||[])if(D.images[i]&&!D.images[i].deleted)out.push([i,p.id]);return out}
 function fileList(){const out=[];for(const p of livePosts().sort((a,b)=>b.createdAt-a.createdAt))for(const i of liveFiles(p))out.push([i,p.id]);return out}
@@ -576,6 +579,10 @@ function vSettings(){const th=[['system','端末に合わせる'],['light','ラ�
   <div class="btns">${G.token()?`<button class="pill" data-act="sync">今すぐ同期</button><button class="pill ghost" data-act="logout">切断</button>`:`<button class="pill" data-act="login" ${S.clientId?'':'disabled'}>Googleで接続</button>${S.linked?'<button class="pill ghost" data-act="logout">切断</button>':''}`}</div>
   <div class="set-row"><div class="lb">起動時に自動で再接続<small>トークンの期限（約1時間）が切れていたら、起動時に自動でGoogleに再接続します</small></div>${sw('autoSync',S.autoSync)}</div>
  </div>
+ <div class="set-sec"><h3>ミュート中のアカウント</h3>
+  <div class="note">ミュートしたアカウントのポストは、ホーム・検索・トレンド・カレンダーに表示されません（プロフィールからは見られます）。使用中のアカウントに切り替えると、そのアカウントのポストは表示されます。</div>
+  ${liveAccs().filter(a=>a.muted).map(a=>`<div class="dacc">${avatar(a,36)}<span class="t"><b>${esc(a.name)}</b><span>@${esc(a.handle)}</span></span><button class="pill ghost sm" data-act="mute" data-id="${a.id}">解除</button></div>`).join('')||'<div class="note" style="padding-top:8px">ミュート中のアカウントはありません</div>'}
+ </div>
  <div class="set-sec"><h3>データ</h3>
   <div class="btns"><button class="pill ghost" data-act="export" data-v="txt">テキスト(.txt)</button><button class="pill ghost" data-act="export" data-v="csv">CSV</button><button class="pill ghost" data-act="export" data-v="json">バックアップ(.json)</button></div>
   <div class="btns"><button class="pill ghost" data-act="import">バックアップから復元</button><button class="pill ghost" data-act="import-tm">ツイメモのCSVを取り込む</button></div>
@@ -590,7 +597,7 @@ function closeLayers(){$$('.layer').forEach(l=>l.remove());$('.viewer')?.remove(
 function openDrawer(){const c=cur();openLayer(`<div class="backdrop" data-act="close"></div><aside class="drawer">
  <div class="dtop"><div data-go="#/u/${c.id}">${avatar(c,44)}</div><button class="ibtn" data-act="close">${ic('close')}</button></div>
  <div class="dme"><span class="nm">${esc(c.name)}</span><span class="hd">@${esc(c.handle)}</span><div class="ff"><span><b>${fmtNum(c.following)}</b> フォロー中</span><span><b>${fmtNum(c.followers)}</b> フォロワー</span></div></div>
- <div class="dsep"></div>${liveAccs().map(a=>`<button class="dacc" data-act="acc-switch" data-id="${a.id}">${avatar(a,36)}<span class="t"><b>${esc(a.name)}</b><span>@${esc(a.handle)}</span></span>${a.id===c.id?`<span class="ck">${ic('check')}</span>`:''}</button>`).join('')}
+ <div class="dsep"></div>${liveAccs().map(a=>`<button class="dacc" data-act="acc-switch" data-id="${a.id}">${avatar(a,36)}<span class="t"><b>${esc(a.name)}</b><span>@${esc(a.handle)}${a.muted?' · 🔇ミュート中':''}</span></span>${a.id===c.id?`<span class="ck">${ic('check')}</span>`:''}</button>`).join('')}
  <button class="dacc" data-act="acc-new"><span class="ibtn" style="border:1px solid var(--line)">${ic('plus')}</span><span class="t"><b>アカウントを作成</b></span></button>
  <div class="dsep"></div><div class="dnav"><a data-go="#/u/${c.id}">${ic('user')}プロフィール</a><a data-go="#/bm">${ic('bookmark')}ブックマーク</a><a data-go="#/cal">${ic('cal')}カレンダー</a><a data-go="#/media">${ic('image')}ストレージ</a><a data-go="#/settings">${ic('set')}設定</a></div>
  <div class="dsep"></div><div class="dsync">${ic('cloud')} ${syncText()}</div></aside>`)}
@@ -714,12 +721,15 @@ function doAct(a,el,e){const id=el.dataset.id;const p=id&&D.posts[id];
  case'share':if(navigator.share)navigator.share({text:p.text}).catch(()=>{});else navigator.clipboard?.writeText(p.text).then(()=>toast('テキストをコピーしました'));break;
  case'more':actionSheet([
    ...(!p.replyTo?[{icon:'pin',label:p.pinned?'プロフィールへの固定を解除':'プロフィールに固定する',fn:()=>{for(const q of Object.values(D.posts))if(q.pinned&&q.accountId===p.accountId&&q!==p){q.pinned=false;q.updatedAt=now()}p.pinned=!p.pinned;upsert('posts',p);toast(p.pinned?'固定しました':'固定を解除しました');render()}}]:[]),
+   ...(p.accountId!==cur().id?[{icon:'user',label:acc(p.accountId)?.muted?`@${esc(acc(p.accountId).handle)} さんのミュートを解除`:`@${esc(acc(p.accountId).handle)} さんをミュート`,fn:()=>toggleMute(p.accountId)}]:[]),
    {icon:'pen',label:'編集',fn:()=>openCompose({editId:id})},
    {icon:'copy',label:'テキストをコピー',fn:()=>navigator.clipboard?.writeText(p.text||'').then(()=>toast('コピーしました'))},
    {icon:'trash',label:'削除',danger:true,fn:()=>{const rs=repliesOf(id).length;if(!confirm(rs?`このポストを削除しますか？\n（返信 ${rs}件 は残ります）`:'このポストを削除しますか？'))return;p.deleted=true;(p.images||[]).forEach(killImage);(p.files||[]).forEach(killImage);upsert('posts',p);toast('削除しました');if(route().name==='post'&&route().arg===id)history.back();else render()}}]);break;
  case'view':{const p=D.posts[el.dataset.pid];const imgs=(p.images||[]).filter(i=>D.images[i]&&!D.images[i].deleted).map(i=>[i,p.id]);openViewer(imgs,+el.dataset.k);break}
  case'view-all':openViewer(mediaList(),+el.dataset.k);break;
  case'file':openFile(el);break;
+ case'mute':toggleMute(id);break;
+ case'pmore':{const x=acc(id);actionSheet([{icon:'user',label:x.muted?`@${esc(x.handle)} さんのミュートを解除`:`@${esc(x.handle)} さんをミュート`,fn:()=>toggleMute(id)}]);break}
  case'acc-switch':S.current=id;saveS();closeLayers();toast('@'+acc(id).handle+' に切り替えました');render();break;
  case'acc-new':closeLayers();openAccEdit();break;
  case'acc-edit':closeLayers();openAccEdit(id);break;
